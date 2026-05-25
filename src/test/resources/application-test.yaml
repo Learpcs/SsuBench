@@ -1,8 +1,8 @@
 spring:
   datasource:
-    url: jdbc:postgresql://${POSTGRES_URL}:${POSTGRES_PORT}/${POSTGRES_DB}
-    username: ${POSTGRES_USER}
-    password: ${POSTGRES_PASSWORD}
+    url: jdbc:postgresql://localhost:5432/db
+    username: user
+    password: password
     driver-class-name: org.postgresql.Driver
   jpa:
     hibernate:
@@ -15,9 +15,9 @@ spring:
     timeout-per-shutdown-phase: 30s
 
 jwt:
-  secret: ${JWT_SECRET}
-  access-expiration: ${JWT_ACCESS_EXPIRATION}
-  refresh-expiration: ${JWT_REFRESH_EXPIRATION}
+  secret: DA09229F-B779-48E4-ABBC-CA0AD454FA19
+  access-expiration: 900000
+  refresh-expiration: 604800000
 
 server:
   port: 8080
