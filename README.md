@@ -1,550 +1,159 @@
-# SsuBench — Платформа для размещения заданий
+# SsuBench: Руководство по использованию
 
-REST API сервис, где заказчики размещают задания, исполнители откликаются на них, а оплата выполненной работы производится виртуальными баллами.
+Платформа для размещения заданий. Заказчики публикуют задачи, исполнители откликаются, оплата проходит виртуальными баллами.
 
-## 🚀 Быстрый старт
+## 1. Запуск
 
-### 1. Запуск базы данных
-
+**База данных:**
 ```bash
 docker compose up -d postgres
 ```
 
-### 2. Запуск приложения
-
+**Приложение:**
 ```bash
 ./gradlew bootRun
 ```
 
-Или собрать JAR:
-
+**Переменные окружения (.env):**
 ```bash
-./gradlew build
-java -jar build/libs/SsuBench-0.0.1-SNAPSHOT.jar
-```
-
-### 3. Переменные окружения
-
-Создайте `.env` файл или экспортируйте переменные:
-
-```bash
-export JWT_SECRET="your-super-secret-key-at-least-32-chars"
-export JWT_ACCESS_EXPIRATION=900000
-export JWT_REFRESH_EXPIRATION=604800000
-
-export POSTGRES_DB=db
-export POSTGRES_USER=user
-export POSTGRES_PASSWORD=password
-export POSTGRES_URL=localhost
-export POSTGRES_PORT=5432
+JWT_SECRET=DA09229F-B779-48E4-ABBC-CA0AD454FA19
+JWT_ACCESS_EXPIRATION=900000
+JWT_REFRESH_EXPIRATION=604800000
+POSTGRES_DB=db
+POSTGRES_USER=user
+POSTGRES_PASSWORD=password
+POSTGRES_URL=localhost
+POSTGRES_PORT=5432
 ```
 
 ---
 
-## 📋 Основные сценарии использования
+## 2. Сценарий: Полный цикл работы
 
-### Сценарий 1: Заказчик создаёт задачу и находит исполнителя
+### Шаг 1. Регистрация участников
 
-#### Шаг 1.1 — Регистрация заказчика
-
+**Заказчик:**
 ```bash
 curl -X POST http://localhost:8080/api/auth/register \
   -H "Content-Type: application/json" \
-  -d '{
-    "username": "customer_ivan",
-    "password": "SecurePass123!",
-    "role": "CUSTOMER"
-  }'
+  -d '{"username": "customer_ivan", "password": "password123", "role": "CUSTOMER"}'
+```
+*Сохраните `accessToken` из ответа.*
+
+**Исполнитель:**
+```bash
+curl -X POST http://localhost:8080/api/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{"username": "executor_alex", "password": "password123", "role": "EXECUTOR"}'
 ```
 
-**Ответ:**
-```json
-{
-  "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
-  "refreshToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
-}
+**Администратор:**
+```bash
+curl -X POST http://localhost:8080/api/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{"username": "admin_boss", "password": "password123", "role": "ADMIN"}'
 ```
 
-Сохраните токены — они понадобятся для всех последующих запросов.
+---
 
-#### Шаг 1.2 — Создание задачи
+### Шаг 2. Создание задачи (Заказчик)
 
 ```bash
 curl -X POST http://localhost:8080/api/tasks \
   -H "Content-Type: application/json" \
-  -H "Authorization: Bearer <customer_token>" \
-  -d '{
-    "description": "Разработать REST API для сервиса уведомлений",
-    "reward": 500.00
-  }'
+  -H "Authorization: Bearer <CUSTOMER_TOKEN>" \
+  -d '{"description": "Разработать API", "reward": 500.00}'
 ```
-
-**Ответ:**
-```json
-{
-  "id": 1,
-  "description": "Разработать REST API для сервиса уведомлений",
-  "customerId": 1,
-  "customerUsername": "customer_ivan",
-  "status": "OPEN",
-  "reward": 500.00,
-  "acceptedBidId": null,
-  "createdAt": "2025-05-25T10:00:00Z"
-}
-```
-
-Задача создана в статусе `OPEN`. Запомните `id` задачи — он понадобится для работы с откликами.
+*Запомните `id` задачи (например, `1`).*
 
 ---
 
-### Сценарий 2: Исполнитель находит задачу и откликается
+### Шаг 3. Отклик на задачу (Исполнитель)
 
-#### Шаг 2.1 — Регистрация исполнителя
-
+Найти доступные задачи:
 ```bash
-curl -X POST http://localhost:8080/api/auth/register \
-  -H "Content-Type: application/json" \
-  -d '{
-    "username": "executor_alex",
-    "password": "SecurePass123!",
-    "role": "EXECUTOR"
-  }'
+curl -X GET "http://localhost:8080/api/tasks/available" \
+  -H "Authorization: Bearer <EXECUTOR_TOKEN>"
 ```
 
-#### Шаг 2.2 — Поиск доступных задач
-
-```bash
-curl -X GET "http://localhost:8080/api/tasks/available?page=0&size=10" \
-  -H "Authorization: Bearer <executor_token>"
-```
-
-**Ответ:**
-```json
-{
-  "items": [
-    {
-      "id": 1,
-      "description": "Разработать REST API для сервиса уведомлений",
-      "customerUsername": "customer_ivan",
-      "status": "OPEN",
-      "reward": 500.00
-    }
-  ],
-  "page": 0,
-  "size": 10,
-  "totalElements": 1,
-  "hasNext": false
-}
-```
-
-#### Шаг 2.3 — Отклик на задачу
-
+Откликнуться:
 ```bash
 curl -X POST http://localhost:8080/api/bids/task/1 \
   -H "Content-Type: application/json" \
-  -H "Authorization: Bearer <executor_token>" \
-  -d '{
-    "description": "Готов выполнить за 3 дня. Есть опыт разработки REST API на Spring Boot."
-  }'
+  -H "Authorization: Bearer <EXECUTOR_TOKEN>" \
+  -d '{"description": "Готов выполнить за 2 дня"}'
 ```
-
-**Ответ:**
-```json
-{
-  "id": 1,
-  "executorId": 2,
-  "executorUsername": "executor_alex",
-  "taskId": 1,
-  "description": "Готов выполнить за 3 дня...",
-  "status": "PENDING",
-  "createdAt": "2025-05-25T11:00:00Z"
-}
-```
-
-Отклик создан в статусе `PENDING` и ожидает решения заказчика.
 
 ---
 
-### Сценарий 3: Заказчик выбирает исполнителя
+### Шаг 4. Выбор исполнителя (Заказчик)
 
-#### Шаг 3.1 — Просмотр всех откликов на задачу
-
+Посмотреть отклики:
 ```bash
-curl -X GET "http://localhost:8080/api/bids/task/1?page=0&size=10" \
-  -H "Authorization: Bearer <customer_token>"
+curl -X GET "http://localhost:8080/api/bids/task/1" \
+  -H "Authorization: Bearer <CUSTOMER_TOKEN>"
 ```
 
-**Ответ:**
-```json
-{
-  "items": [
-    {
-      "id": 1,
-      "executorUsername": "executor_alex",
-      "description": "Готов выполнить за 3 дня...",
-      "status": "PENDING"
-    },
-    {
-      "id": 2,
-      "executorUsername": "executor_maria",
-      "description": "Сделаю быстро и качественно",
-      "status": "PENDING"
-    }
-  ]
-}
-```
-
-#### Шаг 3.2 — Принятие отклика
-
+Принять отклик (например, id=1):
 ```bash
 curl -X POST http://localhost:8080/api/bids/1/accept \
-  -H "Authorization: Bearer <customer_token>"
+  -H "Authorization: Bearer <CUSTOMER_TOKEN>"
 ```
-
-**Что происходит:**
-- Статус отклика меняется на `ACCEPTED`
-- Статус задачи меняется на `IN_PROGRESS`
-- Все остальные отклики автоматически отклоняются (`REJECTED`)
-
-**Ответ:**
-```json
-{
-  "id": 1,
-  "executorUsername": "executor_alex",
-  "status": "ACCEPTED"
-}
-```
+*Статус задачи сменится на `IN_PROGRESS`.*
 
 ---
 
-### Сценарий 4: Исполнитель выполняет работу
+### Шаг 5. Выполнение и оплата
 
-#### Шаг 4.1 — Завершение задачи
-
-После выполнения работы исполнитель помечает задачу как завершённую:
-
+**Исполнитель завершает работу:**
 ```bash
 curl -X POST http://localhost:8080/api/tasks/1/complete \
-  -H "Authorization: Bearer <executor_token>"
+  -H "Authorization: Bearer <EXECUTOR_TOKEN>"
 ```
 
-**Ответ:**
-```json
-{
-  "id": 1,
-  "description": "Разработать REST API для сервиса уведомлений",
-  "status": "COMPLETED",
-  "reward": 500.00
-}
-```
-
-Задача перешла в статус `COMPLETED` и ожидает подтверждения от заказчика.
-
----
-
-### Сценарий 5: Заказчик подтверждает выполнение и оплачивает
-
-#### Шаг 5.1 — Подтверждение выполнения
-
+**Заказчик подтверждает и оплачивает:**
 ```bash
 curl -X POST http://localhost:8080/api/tasks/1/confirm \
-  -H "Authorization: Bearer <customer_token>"
+  -H "Authorization: Bearer <CUSTOMER_TOKEN>"
 ```
-
-**Что происходит:**
-1. Проверяется баланс заказчика (должно быть ≥ 500.00)
-2. Списывается 500.00 у заказчика
-3. Начисляется 500.00 исполнителю
-4. Создаётся запись о платеже
-5. Статус задачи меняется на `CONFIRMED`
-
-**Ответ:**
-```json
-{
-  "id": 1,
-  "taskId": 1,
-  "bidId": 1,
-  "amount": 500.00,
-  "processedAt": "2025-05-25T15:00:00Z"
-}
-```
-
-#### Шаг 5.2 — Проверка баланса исполнителя
-
-```bash
-curl -X GET http://localhost:8080/api/admin/users/2 \
-  -H "Authorization: Bearer <admin_token>"
-```
-
-**Ответ:**
-```json
-{
-  "id": 2,
-  "username": "executor_alex",
-  "role": "EXECUTOR",
-  "balance": 500.00,
-  "isBlocked": false
-}
-```
-
-Баланс исполнителя увеличился на 500.00 ✅
+*Происходит списание с баланса заказчика и начисление исполнителю.*
 
 ---
 
-### Сценарий 6: Администратор управляет пользователями
+### Шаг 6. Администрирование
 
-#### Шаг 6.1 — Регистрация администратора
-
+Проверить баланс исполнителя:
 ```bash
-curl -X POST http://localhost:8080/api/auth/register \
-  -H "Content-Type: application/json" \
-  -d '{
-    "username": "admin_boss",
-    "password": "SecurePass123!",
-    "role": "ADMIN"
-  }'
+curl -X GET "http://localhost:8080/api/admin/users/2" \
+  -H "Authorization: Bearer <ADMIN_TOKEN>"
 ```
 
-#### Шаг 6.2 — Просмотр всех пользователей
-
-```bash
-curl -X GET "http://localhost:8080/api/admin/users?page=0&size=20" \
-  -H "Authorization: Bearer <admin_token>"
-```
-
-**Ответ:**
-```json
-{
-  "items": [
-    {
-      "id": 1,
-      "username": "customer_ivan",
-      "role": "CUSTOMER",
-      "balance": 500.00,
-      "isBlocked": false
-    },
-    {
-      "id": 2,
-      "username": "executor_alex",
-      "role": "EXECUTOR",
-      "balance": 500.00,
-      "isBlocked": false
-    }
-  ],
-  "totalElements": 2
-}
-```
-
-#### Шаг 6.3 — Блокировка нарушителя
-
+Заблокировать пользователя:
 ```bash
 curl -X POST http://localhost:8080/api/admin/users/2/block \
-  -H "Authorization: Bearer <admin_token>"
-```
-
-**Ответ:**
-```json
-{
-  "id": 2,
-  "username": "executor_alex",
-  "role": "EXECUTOR",
-  "isBlocked": true
-}
-```
-
-Заблокированный пользователь не может войти в систему.
-
-#### Шаг 6.4 — Разблокировка
-
-```bash
-curl -X POST http://localhost:8080/api/admin/users/2/unblock \
-  -H "Authorization: Bearer <admin_token>"
+  -H "Authorization: Bearer <ADMIN_TOKEN>"
 ```
 
 ---
 
-## 🔧 Дополнительные операции
+## 3. Шпаргалка по статусам
 
-### Отмена отклика (исполнитель)
+**Задачи:**
+1. `OPEN` — Поиск исполнителя.
+2. `IN_PROGRESS` — Работа идет.
+3. `COMPLETED` — Ждет подтверждения.
+4. `CONFIRMED` — Оплачено.
 
-Если исполнитель передумал:
-
-```bash
-curl -X POST http://localhost:8080/api/bids/1/cancel \
-  -H "Authorization: Bearer <executor_token>"
-```
-
-Можно отменить только отклик в статусе `PENDING`.
-
-### Отклонение отклика (заказчик)
-
-```bash
-curl -X POST http://localhost:8080/api/bids/1/reject \
-  -H "Authorization: Bearer <customer_token>"
-```
-
-### Отмена задачи (заказчик)
-
-```bash
-curl -X POST http://localhost:8080/api/tasks/1/cancel \
-  -H "Authorization: Bearer <customer_token>"
-```
-
-Нельзя отменить задачу в статусе `COMPLETED` или `CONFIRMED`.
-
-### Обновление задачи (заказчик)
-
-```bash
-curl -X PUT http://localhost:8080/api/tasks/1 \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer <customer_token>" \
-  -d '{
-    "description": "Обновлённое описание задачи",
-    "reward": 600.00
-  }'
-```
-
-Можно обновить только задачу в статусе `OPEN`.
-
-### Получение информации о платеже
-
-```bash
-curl -X GET http://localhost:8080/api/tasks/1/payment \
-  -H "Authorization: Bearer <customer_token>"
-```
+**Отклики:**
+1. `PENDING` — На рассмотрении.
+2. `ACCEPTED` — Принят.
+3. `REJECTED` — Отклонен.
 
 ---
 
-## 📊 Статусы задач
+## 4. Запуск тестов
 
-| Статус | Описание |
-|--------|----------|
-| `OPEN` | Задача опубликована, принимаются отклики |
-| `IN_PROGRESS` | Исполнитель выбран, работа идёт |
-| `COMPLETED` | Исполнитель завершил работу, ждёт подтверждения |
-| `CONFIRMED` | Заказчик подтвердил, оплата проведена |
-| `CANCELLED` | Задача отменена заказчиком |
-
-## 📊 Статусы откликов
-
-| Статус | Описание |
-|--------|----------|
-| `PENDING` | Отклик отправлен, ждёт решения |
-| `ACCEPTED` | Заказчик принял отклик |
-| `REJECTED` | Заказчик отклонил отклик |
-| `CANCELLED` | Исполнитель отменил отклик |
-
-## 🔐 Аутентификация
-
-Все запросы кроме `/api/auth/**` требуют JWT токен:
-
-```
-Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
-```
-
-Токен передаётся в заголовке каждого запроса. Время жизни access токена — 15 минут, refresh токена — 7 дней.
-
-### Обновление токенов
-
+Проект покрыт тестами (Testcontainers + MockMvc):
 ```bash
-curl -X POST http://localhost:8080/api/auth/refresh \
-  -H "Content-Type: application/json" \
-  -d '{
-    "refreshToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
-  }'
+./gradlew test
 ```
-
----
-
-## 🏗 Архитектура
-
-```
-src/main/java/com/rodin/SsuBench/
-├── Config/          # Конфигурация безопасности, JWT, CORS
-├── Controller/      # REST контроллеры
-├── Entity/          # JPA сущности
-├── Exception/       # Обработка ошибок
-├── Middleware/      # Фильтры (logging, request_id, recover)
-├── Repository/      # Репозитории
-├── Service/         # Бизнес-логика
-└── Utils/           # Утилиты (JWT)
-```
-
-## 🧪 Тесты
-
-Компонентные тесты для всех endpoints:
-
-```bash
-./gradlew test --tests "com.rodin.SsuBench.ComponentTests.*"
-```
-
-Тесты используют:
-- **Testcontainers** — реальный PostgreSQL в Docker
-- **MockMvc** — HTTP запросы к контроллерам
-- **58 тестов** покрывают все основные сценарии
-
-## 📄 OpenAPI спецификация
-
-Полная спецификация доступна в файле `src/main/resources/openapi.yaml`.
-
-Можно открыть в Swagger UI или ReDoc:
-
-```bash
-# Через Swagger Editor
-open https://editor.swagger.io/?url=https://raw.githubusercontent.com/your-repo/SsuBench/main/src/main/resources/openapi.yaml
-```
-
-## ⚙️ Конфигурация сервера
-
-| Параметр | Значение |
-|----------|----------|
-| Connection timeout | 20s |
-| Keep-alive timeout | 60s |
-| Graceful shutdown | 30s |
-| Max threads | 200 |
-
-## 🛡 Безопасность
-
-- Пароли хранятся в bcrypt
-- JWT через `Authorization: Bearer`
-- Валидация всех входных данных
-- Единый формат ошибок
-- Request ID для трассировки запросов
-
----
-
-## Примеры ошибок
-
-### Недостаточно средств
-
-```json
-{
-  "status": 400,
-  "message": "Недостаточно средств на балансе",
-  "timestamp": "2025-05-25T15:00:00Z"
-}
-```
-
-### Задача не найдена
-
-```json
-{
-  "status": 404,
-  "message": "Задача не найдена",
-  "timestamp": "2025-05-25T15:00:00Z"
-}
-```
-
-### Токен невалиден
-
-```json
-{
-  "status": 401,
-  "message": "Токен недействителен или истек",
-  "timestamp": "2025-05-25T15:00:00Z"
-}
-```
-
----
-
-**SsuBench** — просто и надёжно. Заказчики находят исполнителей, исполнители получают оплату. Всё честно.
